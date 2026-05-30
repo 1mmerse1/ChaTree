@@ -1,4 +1,4 @@
-# ChainTree — AI 智能对话管理系统
+# ChaTree — AI 智能对话管理系统
 
 基于 PySide6 的桌面端 AI 对话应用，支持 OpenAI 兼容的多种 LLM 后端，提供文件夹管理、消息间链接、追问批注等结构化对话管理能力。
 
