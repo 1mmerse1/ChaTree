@@ -26,7 +26,7 @@ git clone https://github.com/1mmerse1/ChaTree.git
 cd ChaTree
 
 # 安装依赖
-pip install PySide6 openai markdown
+pip install PySide6 openai markdown -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 > **说明**：KaTeX 数学渲染所需的 JS/CSS 已随项目打包，无需额外安装。
