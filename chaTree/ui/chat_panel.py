@@ -168,7 +168,7 @@ class ChatPanel(QWidget):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(8)
 
-        title = QLabel("Hello, I'm ChainTree")
+        title = QLabel("Hello, I'm ChaTree")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color:#e2e8f0;font-size:36px;font-weight:700;")
 

@@ -475,11 +475,9 @@ class ConversationView(QWidget):
             self._run_js(f"ChainTree.scrollToMsg({_json.dumps(pending)});", None)
 
     def _on_height_result(self, result):
-        try:
-            h = max(int(float(result)), 100) if result else 100
-        except (ValueError, TypeError):
-            h = 100
-        self._view.setFixedHeight(h)
+        # WebView 高度由外层 layout 的 stretch 控制，不设置固定高度，
+        # 否则会撑爆窗口布局并导致内部滚动失效。
+        pass
 
     # ── 导航处理 ──
 
