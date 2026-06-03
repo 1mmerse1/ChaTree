@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QSplitter, QWidget
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QHBoxLayout,
+    QMainWindow,
+    QSplitter,
+    QWidget,
+)
 
+from ..export import (
+    export_conversation_to_md,
+    export_workspace_to_files,
+    export_workspace_to_md,
+    sanitize_filename,
+)
 from ..models import Annotation, Conversation, MessageNode
 from ..styles import APP_QSS
 from ..workspace import ws
@@ -50,6 +63,48 @@ class MainWindow(QMainWindow):
 
         lay.addWidget(self.sidebar)
         lay.addWidget(self._splitter, 1)
+
+        self._build_menu_bar()
+
+    def _build_menu_bar(self):
+        menubar = self.menuBar()
+
+        file_menu = menubar.addMenu("文件")
+
+        export_cur = file_menu.addAction("导出当前对话...")
+        export_cur.setShortcut("Ctrl+E")
+        export_cur.triggered.connect(self._export_current)
+
+        export_all = file_menu.addAction("导出全部对话（Obsidian Vault）...")
+        export_all.setShortcut("Ctrl+Shift+E")
+        export_all.triggered.connect(self._export_all)
+
+    def _export_current(self):
+        """导出当前打开的对话为单个 .md 文件。"""
+        conv = self.chat_panel.conv
+        if not conv:
+            return
+        default_name = sanitize_filename(conv.title) + ".md"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出当前对话", default_name, "Markdown 文件 (*.md)"
+        )
+        if path:
+            try:
+                md = export_conversation_to_md(conv)
+                Path(path).write_text(md, encoding="utf-8")
+            except OSError:
+                pass
+
+    def _export_all(self):
+        """导出全部对话为多文件 Obsidian Vault 结构（按文件夹树组织目录）。"""
+        if not ws.conversations:
+            return
+        dir_path = QFileDialog.getExistingDirectory(self, "选择导出目录")
+        if dir_path:
+            try:
+                export_workspace_to_files(dir_path)
+            except OSError:
+                pass
 
     def _seed_demo(self):
         if ws.conversations:

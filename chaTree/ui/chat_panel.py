@@ -495,9 +495,7 @@ class ChatPanel(QWidget):
         if dlg.exec() == QDialog.Accepted:
             q = dlg.question()
             if q:
-                self.annotation_created.emit(node, sel, q)
-
-    annotation_created = Signal(object, str, str)
+                self.conv_view.annotation_created.emit(node, sel, q)
 
     def _on_annotation_clicked(self, node: MessageNode, ann: Annotation):
         self.ann_panel.show_annotation(self.conv, node, ann)

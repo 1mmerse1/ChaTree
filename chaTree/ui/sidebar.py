@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
+    QFileDialog,
     QFrame,
     QLabel,
     QMenu,
@@ -19,6 +21,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
 )
 
+from ..export import export_conversation_to_md, sanitize_filename
 from ..models import Conversation, Folder
 from ..styles import BTN_GHOST, BTN_PRIMARY
 from ..workspace import ws
@@ -158,6 +161,9 @@ class Sidebar(QWidget):
         if item:
             d = item.data(0, Qt.UserRole)
             if d and d[0] == "conv":
+                menu.addAction("📤  导出为 Markdown").triggered.connect(
+                    lambda checked=False, cid=d[1]: self._export_conv(cid)
+                )
                 menu.addAction("🗑  删除对话").triggered.connect(
                     lambda: (ws.delete_conversation(d[1]), self.refresh())
                 )
@@ -198,6 +204,22 @@ class Sidebar(QWidget):
             lambda cid, mid: self.search_navigate.emit(cid, mid)
         )
         dlg.exec()
+
+    def _export_conv(self, conv_id: str):
+        """导出单场对话为 Markdown 文件。"""
+        conv = ws.conversations.get(conv_id)
+        if not conv:
+            return
+        default_name = sanitize_filename(conv.title) + ".md"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出 Markdown", default_name, "Markdown 文件 (*.md)"
+        )
+        if path:
+            try:
+                md = export_conversation_to_md(conv)
+                Path(path).write_text(md, encoding="utf-8")
+            except OSError:
+                pass  # 用户取消或写入失败时静默忽略
 
     def _new_conv(self):
         dlg = NewConversationDialog(self)
