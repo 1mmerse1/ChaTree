@@ -54,6 +54,15 @@ QLineEdit:focus, QTextEdit:focus { border-color: #4299e1; }
 
 DIALOG_BASE = """
 QDialog { background: #1a202c; border: 1px solid #2d3748; border-radius: 12px; }
+/* 全局 QWidget { background: #0f1117 } 会通过 parent chain 泄漏到 Dialog 子控件；
+   此规则用更高 specificity 覆盖，使对话框内所有 QWidget 统一为 #1a202c */
+QDialog QWidget { background: #1a202c; }
+/* 输入框恢复为近黑色以与对话框表面区分 */
+QDialog QLineEdit, QDialog QTextEdit {
+    background: #0f1117; border: 1px solid #2d3748; border-radius: 7px;
+    padding: 9px 12px; font-size: 13px; color: #e2e8f0;
+}
+QDialog QLineEdit:focus, QDialog QTextEdit:focus { border-color: #4299e1; }
 QLabel  { font-size: 11px; color: #718096; }
 """
 

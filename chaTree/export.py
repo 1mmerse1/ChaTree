@@ -1,6 +1,7 @@
 """对话导出为 Markdown 文件 —— 树状拓扑扁平化。
 
-- 主线对话线性展示
+方案 A：单文件折叠流
+- 主线对话线性展示，消息间以 --- 分隔
 - 追问/批注用 <details>/<summary> 折叠（GitHub / Obsidian 原生兼容）
 - 跨对话链接用 Obsidian [[]] wikilink 语法
 - 标签: frontmatter tags: [...] + 行内 #tag（Obsidian 可直接识别）
@@ -41,6 +42,16 @@ def _resolve_wikilink_title(
     target_conv_id: str, target_msg_id: str = "", *, use_anchor: bool = False
 ) -> str:
     """将 (对话ID, 消息ID) 解析为 Obsidian wikilink 显示文本。
+
+    Args:
+        target_conv_id: 目标对话 ID。
+        target_msg_id: 目标消息 ID（空字符串 = 对话级链接）。
+        use_anchor: True 时使用 ``#msg-xxx`` 作为 HTML anchor（多文件模式）；
+                    False 时使用 ``#消息预览文本``（单文件模式）。
+
+    Returns:
+        ``"对话标题"`` / ``"对话标题#msg-xxx"`` / ``"对话标题#预览文本"``。
+        目标对话不存在时降级返回 ``"未知对话"``。
     """
     target_conv = ws.conversations.get(target_conv_id)
     if not target_conv:

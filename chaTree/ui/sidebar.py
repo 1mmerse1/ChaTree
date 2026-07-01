@@ -27,6 +27,7 @@ from ..styles import BTN_GHOST, BTN_PRIMARY
 from ..workspace import ws
 from .dialogs import NewConversationDialog, SearchDialog, SettingsDialog
 from .draggable_tree import DraggableTree
+from .heatmap_dialog import HeatmapDialog
 
 
 class Sidebar(QWidget):
@@ -93,6 +94,32 @@ class Sidebar(QWidget):
         )
         sb.clicked.connect(self._open_search)
         lay.addWidget(sb)
+
+        hb = QPushButton("📊  活动统计")
+        hb.setStyleSheet(
+            BTN_GHOST
+            + """
+            QPushButton {
+                margin: 0px 12px 4px 12px; padding: 8px 14px;
+                text-align: left; font-size: 12px;
+            }
+        """
+        )
+        hb.clicked.connect(lambda: HeatmapDialog(self).exec())
+        lay.addWidget(hb)
+
+        gb = QPushButton("🕸️  知识图谱")
+        gb.setStyleSheet(
+            BTN_GHOST
+            + """
+            QPushButton {
+                margin: 0px 12px 4px 12px; padding: 8px 14px;
+                text-align: left; font-size: 12px;
+            }
+        """
+        )
+        gb.clicked.connect(self._open_graph)
+        lay.addWidget(gb)
 
         self.tree = DraggableTree()
         self.tree.setHeaderHidden(True)
@@ -229,3 +256,13 @@ class Sidebar(QWidget):
             ws.add_conversation(c, fid)
             self.refresh()
             self.conversation_selected.emit(c)
+
+    def _open_graph(self):
+        """打开知识图谱对话框。"""
+        from ..graph.graph_dialog import GraphDialog
+
+        dlg = GraphDialog(self)
+        dlg.navigate_requested.connect(
+            lambda cid, mid: self.search_navigate.emit(cid, mid)
+        )
+        dlg.show()

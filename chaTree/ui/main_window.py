@@ -79,6 +79,12 @@ class MainWindow(QMainWindow):
         export_all.setShortcut("Ctrl+Shift+E")
         export_all.triggered.connect(self._export_all)
 
+        view_menu = menubar.addMenu("视图")
+
+        graph_action = view_menu.addAction("知识图谱")
+        graph_action.setShortcut("Ctrl+G")
+        graph_action.triggered.connect(self._open_graph)
+
     def _export_current(self):
         """导出当前打开的对话为单个 .md 文件。"""
         conv = self.chat_panel.conv
@@ -105,6 +111,16 @@ class MainWindow(QMainWindow):
                 export_workspace_to_files(dir_path)
             except OSError:
                 pass
+
+    def _open_graph(self):
+        """打开知识图谱对话框。"""
+        from ..graph.graph_dialog import GraphDialog
+
+        dlg = GraphDialog(self)
+        dlg.navigate_requested.connect(
+            lambda cid, mid: self.chat_panel._navigate_to(cid, mid)
+        )
+        dlg.show()
 
     def _seed_demo(self):
         if ws.conversations:

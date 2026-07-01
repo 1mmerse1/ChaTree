@@ -137,31 +137,51 @@ class TagWorker(QThread):
             return
         try:
             client = openai.OpenAI(api_key=ws.api_key, base_url=ws.base_url)
-            # 直接用 user message，避免某些模型忽略 system prompt 返回空
-            content = (
-                f"根据以下对话，生成3-5个简短的标签（每个1-3词），只输出逗号分隔的标签：\n\n"
-                f"用户：{self._user_msg[:500]}\n\n"
-                f"助手：{self._assistant_msg[:800]}"
-            )
-            msgs = [{"role": "user", "content": content}]
-            full = ""
-            with client.chat.completions.create(
+            print(f"[TagWorker] 模型: {ws.model}  base_url: {ws.base_url}")
+            msgs = [
+                {"role": "system", "content": TAG_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"用户问题：{self._user_msg[:500]}\n\n"
+                        f"助手回答：{self._assistant_msg[:800]}"
+                    ),
+                },
+            ]
+
+            # 用非流式（标签极短，流式无益；reasoning 模型流式常返回空）
+            resp = client.chat.completions.create(
                 model=ws.model,
                 messages=msgs,
-                max_tokens=80,
-                stream=True,
-            ) as stream:
-                for chunk in stream:
-                    delta = chunk.choices[0].delta.content or ""
-                    full += delta
-            text = full.strip()
+                max_tokens=200,  # reasoning 模型需要额外 token 预算
+                stream=False,
+            )
+            choice = resp.choices[0] if resp.choices else None
+            if choice is None:
+                print("[TagWorker] API 返回空 choices")
+                self.finished.emit([])
+                return
+
+            text = (choice.message.content or "").strip()
             print(f"[TagWorker] API 返回: {text!r}")
-            # 同时支持中英文逗号分隔
+
+            # 某些模型（如 deepseek-reasoner）content 为空但 reasoning_content 有值
+            if not text:
+                reasoning = getattr(choice.message, "reasoning_content", None)
+                if reasoning:
+                    print(f"[TagWorker] reasoning_content: {reasoning!r}")
+                finish = getattr(choice, "finish_reason", "?")
+                print(f"[TagWorker] finish_reason={finish}, 无 content")
+                self.finished.emit([])
+                return
+
             import re
             tags = [t.strip() for t in re.split(r"[，,]", text) if t.strip()]
             tags = tags[:5]
             if tags:
                 print(f"[TagWorker] 生成标签: {tags}")
+            else:
+                print("[TagWorker] 未能解析出任何标签")
             self.finished.emit(tags)
         except Exception as e:
             import traceback
