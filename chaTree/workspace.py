@@ -81,12 +81,17 @@ class Workspace:
         self._rebuild_backlink_index()
 
     def _rebuild_backlink_index(self):
-        """从所有已加载对话重建反向链接索引。"""
+        """从所有已加载对话重建反向链接索引（含支线内链接）。"""
         self._backlink_index = {}
         for conv in self.conversations.values():
             for link in conv.links:
                 key = (link.target_conv_id, link.target_msg_id)
                 self._backlink_index.setdefault(key, []).append(link)
+            # 支线内的链接也加入索引
+            for branch in conv.branches:
+                for link in branch.links:
+                    key = (link.target_conv_id, link.target_msg_id)
+                    self._backlink_index.setdefault(key, []).append(link)
 
     def get_backlinks(self, conv_id: str, msg_id: str = "") -> list[Link]:
         """返回所有指向 (conv_id, msg_id) 的链接。msg_id="" 表示对话级。"""

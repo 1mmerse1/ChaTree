@@ -18,8 +18,8 @@ from PySide6.QtWidgets import (
 
 from ..constants import CIRCLE, USE_WEBENGINE
 from ..markdown_render import MD_CSS, md_to_html, md_to_html_katex, render_msg_body
-from ..models import Annotation, Conversation, MessageNode
-from ..styles import BTN_GHOST
+from ..models import Annotation, Branch, Conversation, MessageNode
+from ..styles import BTN_GHOST, BTN_PRIMARY
 from ..workers import AnnotationWorker
 from ..workspace import ws
 
@@ -31,6 +31,9 @@ else:
 
 class AnnotationPanel(QWidget):
     closed = Signal()
+    annotation_shown = Signal()           # 非支线注释显示时发射
+    branch_created = Signal(str, str)     # (conv_id, branch_id)
+    branch_requested = Signal(str, str)   # (conv_id, branch_id)
 
     def __init__(self):
         super().__init__()
@@ -42,6 +45,8 @@ class AnnotationPanel(QWidget):
         self._worker: Optional[AnnotationWorker] = None
         self._buf = ""
         self._current_conv: Optional[Conversation] = None
+        self._current_node: Optional[MessageNode] = None
+        self._current_ann: Optional[Annotation] = None
         self._ans: Optional[QTextBrowser] = None
         self._build()
         self.hide()
@@ -85,7 +90,14 @@ class AnnotationPanel(QWidget):
 
     def show_annotation(self, conv: Conversation, node: MessageNode, ann: Annotation):
         self._current_conv = conv
+        self._current_node = node
+        self._current_ann = ann
         self._ans = None
+
+        # 如果已扩展为支线 → 通知打开 BranchPanel
+        if ann.branch_id:
+            self.branch_requested.emit(conv.id, ann.branch_id)
+            return
 
         while self._body_lay.count() > 1:
             item = self._body_lay.takeAt(0)
@@ -133,7 +145,35 @@ class AnnotationPanel(QWidget):
             self._set_ans("正在生成…", done=False)
             self._start_worker(node.content, ann)
 
+        # 「扩展为支线」按钮
+        expand_btn = QPushButton("📂  扩展为支线")
+        expand_btn.setStyleSheet(BTN_PRIMARY)
+        expand_btn.setCursor(Qt.PointingHandCursor)
+        expand_btn.clicked.connect(self._expand_to_branch)
+        self._ins(expand_btn)
+
+        self.annotation_shown.emit()
         self.show()
+
+    def _expand_to_branch(self):
+        """将当前注释扩展为支线。"""
+        if not self._current_conv or not self._current_ann or not self._current_node:
+            return
+        import uuid
+
+        ann = self._current_ann
+        branch = Branch(
+            id=str(uuid.uuid4()),
+            annotation_id=ann.id,
+            source_msg_id=self._current_node.id,
+        )
+        ann.branch_id = branch.id
+        self._current_conv.branches.append(branch)
+        ws.save_conversation(self._current_conv)
+
+        # 重新渲染主对话以更新内联标记样式
+        # 通知打开 BranchPanel
+        self.branch_created.emit(self._current_conv.id, branch.id)
 
     def _ins(self, w: QWidget):
         self._body_lay.insertWidget(self._body_lay.count() - 1, w)

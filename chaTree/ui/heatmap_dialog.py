@@ -90,6 +90,16 @@ class HeatmapDialog(QDialog):
 
         for conv in ws.conversations.values():
             total_msgs += len(conv.messages)
+            # 支线消息：初始注释 Q&A 算 2 条 + 后续消息
+            for branch in conv.branches:
+                total_msgs += 2  # 初始注释 user_question + ai_answer
+                total_msgs += len(branch.messages)
+                if branch.created_at:
+                    try:
+                        d = datetime.fromisoformat(branch.created_at).date()
+                        counter[d] += 1
+                    except (ValueError, TypeError):
+                        pass
             if conv.created_at:
                 try:
                     d = datetime.fromisoformat(conv.created_at).date()

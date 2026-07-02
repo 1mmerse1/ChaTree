@@ -12,18 +12,28 @@ class Annotation:
     quoted_text: str
     user_question: str
     ai_answer: str = ""
+    branch_id: str = ""  # 非空 = 已扩展为支线
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "id": self.id,
             "quoted_text": self.quoted_text,
             "user_question": self.user_question,
             "ai_answer": self.ai_answer,
         }
+        if self.branch_id:
+            d["branch_id"] = self.branch_id
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> Annotation:
-        return cls(**d)
+        return cls(
+            id=d["id"],
+            quoted_text=d["quoted_text"],
+            user_question=d["user_question"],
+            ai_answer=d.get("ai_answer", ""),
+            branch_id=d.get("branch_id", ""),
+        )
 
 
 @dataclass
@@ -90,12 +100,52 @@ class Link:
 
 
 @dataclass
+class Branch:
+    """从注释扩展出的多轮子对话（支线）。"""
+    id: str
+    annotation_id: str          # 引用的 Annotation.id
+    source_msg_id: str          # 支线所属的主线消息 ID
+    messages: list = field(default_factory=list)   # list[MessageNode]
+    tags: list = field(default_factory=list)       # list[str] 手动标签
+    links: list = field(default_factory=list)      # list[Link]
+    created_at: str = field(
+        default_factory=lambda: datetime.datetime.now().isoformat()
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "annotation_id": self.annotation_id,
+            "source_msg_id": self.source_msg_id,
+            "created_at": self.created_at,
+            "messages": [m.to_dict() for m in self.messages],
+            "tags": self.tags,
+            "links": [l.to_dict() for l in self.links],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Branch:
+        msgs = [MessageNode.from_dict(m) for m in d.get("messages", [])]
+        lnks = [Link.from_dict(ld) for ld in d.get("links", [])]
+        return cls(
+            id=d["id"],
+            annotation_id=d["annotation_id"],
+            source_msg_id=d["source_msg_id"],
+            created_at=d.get("created_at", ""),
+            messages=msgs,
+            tags=d.get("tags", []),
+            links=lnks,
+        )
+
+
+@dataclass
 class Conversation:
     id: str
     title: str
     messages: list = field(default_factory=list)
     links: list = field(default_factory=list)  # list[Link]
     tags: list = field(default_factory=list)  # list[str]
+    branches: list = field(default_factory=list)  # list[Branch]
     created_at: str = field(
         default_factory=lambda: datetime.datetime.now().isoformat()
     )
@@ -108,12 +158,14 @@ class Conversation:
             "messages": [m.to_dict() for m in self.messages],
             "links": [l.to_dict() for l in self.links],
             "tags": self.tags,
+            "branches": [b.to_dict() for b in self.branches],
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> Conversation:
         msgs = [MessageNode.from_dict(m) for m in d.get("messages", [])]
         lnks = [Link.from_dict(ld) for ld in d.get("links", [])]
+        branches = [Branch.from_dict(bd) for bd in d.get("branches", [])]
         return cls(
             id=d["id"],
             title=d["title"],
@@ -121,6 +173,7 @@ class Conversation:
             messages=msgs,
             links=lnks,
             tags=d.get("tags", []),
+            branches=branches,
         )
 
 

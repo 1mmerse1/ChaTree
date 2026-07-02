@@ -25,6 +25,12 @@ _CONV_COLORS = [
 # ── 边颜色 ────────────────────────────────────────────────────────
 EDGE_SEQUENTIAL = "#4a5568"   # 对话内顺序边 — 灰色实线
 EDGE_LINK = "#60a5fa"         # 跨对话链接边 — 蓝色虚线
+EDGE_BRANCH = "#38b2ac"       # 支线连接边 — 青色实线
+
+# ── 支线节点颜色 ───────────────────────────────────────────────────
+BRANCH_BG = "#234e52"
+BRANCH_BORDER = "#38b2ac"
+BRANCH_HIGHLIGHT = "#4fd1c5"
 
 
 def _conv_color(index: int) -> str:
@@ -72,7 +78,7 @@ class GraphBuilder:
     def build(
         self,
         conversation_ids: list[str] | None = None,
-    ) -> Network:
+    ) -> tuple[Network, set[str]]:
         convs = ws.conversations
         target_ids = (
             set(conversation_ids)
@@ -303,4 +309,71 @@ class GraphBuilder:
                     title=edge_title,
                 )
 
-        return net
+        # ── 3) 支线节点与边 ──────────────────────────────────────
+        branch_node_ids: set[str] = set()
+        for cid in sorted(target_ids):
+            conv = convs.get(cid)
+            if not conv:
+                continue
+            rm = round_maps.get(cid, {})
+
+            for branch in conv.branches:
+                bid = f"branch::{cid}::{branch.id}"
+                branch_node_ids.add(bid)
+
+                # 支线标签：取注释的问题文本截断
+                ann_question = ""
+                for msg in conv.messages:
+                    for a in msg.annotations:
+                        if a.id == branch.annotation_id:
+                            ann_question = a.user_question
+                            break
+                    if ann_question:
+                        break
+
+                label = ann_question[:35].replace("\n", " ")
+                if len(ann_question) > 35:
+                    label += "…"
+                if not label:
+                    label = "支线"
+
+                msg_count = len(branch.messages)
+                title = f"<b>支线 · {conv.title}</b><br><br>"
+                if ann_question:
+                    title += f"❓ {ann_question[:150]}"
+                title += f"<br>💬 {msg_count} 条后续消息"
+                if branch.tags:
+                    title += f"<br><br>标签: {', '.join(branch.tags)}"
+
+                branch_color = {
+                    "background": BRANCH_BG,
+                    "border": BRANCH_BORDER,
+                    "highlight": {
+                        "background": BRANCH_HIGHLIGHT,
+                        "border": BRANCH_BORDER,
+                    },
+                }
+
+                net.add_node(
+                    bid,
+                    label=label,
+                    title=title,
+                    color=branch_color,
+                    shape="diamond",
+                    size=18,
+                    borderWidth=2,
+                )
+
+                # 连接支线到所属主线轮次节点
+                src_round_user_id = rm.get(branch.source_msg_id)
+                if src_round_user_id:
+                    round_nid = _round_id(cid, src_round_user_id)
+                    if _has_node(net, round_nid):
+                        net.add_edge(
+                            round_nid, bid,
+                            color=EDGE_BRANCH,
+                            width=1.5,
+                            title=f"支线 · {conv.title}",
+                        )
+
+        return net, branch_node_ids

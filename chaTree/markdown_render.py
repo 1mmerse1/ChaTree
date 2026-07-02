@@ -313,10 +313,10 @@ def _in_text_region(pos: int, regions: list[tuple[int, int]]) -> bool:
 
 def _inject_inline_markers(
     content: str, annotations: list, links: list
-) -> tuple[str, list[tuple[str, str, str, str, str]]]:
+) -> tuple[str, list[tuple[str, str, str, str, str, bool]]]:
     """将注释和文本链接替换为占位符 token，避开数学公式区域。
 
-    返回: (合并后的文本, [(token, 原始文本, 类型, ID, 徽章), ...])
+    返回: (合并后的文本, [(token, 原始文本, 类型, ID, 徽章, is_branch), ...])
     """
     math_reg = _math_regions(content)
     positions: list[tuple[int, int, str, int]] = []
@@ -336,7 +336,7 @@ def _inject_inline_markers(
 
     pieces: list[str] = []
     prev = 0
-    token_data: list[tuple[str, str, str, str, str]] = []
+    token_data: list[tuple[str, str, str, str, str, bool]] = []
 
     for start, end, typ, idx in positions:
         if start < prev:
@@ -346,11 +346,12 @@ def _inject_inline_markers(
             ann = annotations[idx]
             badge = CIRCLE[idx] if idx < len(CIRCLE) else f"({idx + 1})"
             token = f"\x00ANN{ann.id}\x00"
-            token_data.append((token, ann.quoted_text, "ann", ann.id, badge))
+            is_branch = bool(getattr(ann, "branch_id", ""))
+            token_data.append((token, ann.quoted_text, "ann", ann.id, badge, is_branch))
         else:
             link = text_links[idx]
             token = f"\x00LINK{link.id}\x00"
-            token_data.append((token, link.selected_text, "link", link.id, "🔗"))
+            token_data.append((token, link.selected_text, "link", link.id, "🔗", False))
         pieces.append(token)
         prev = end
 
@@ -360,17 +361,31 @@ def _inject_inline_markers(
 
 def _restore_inline_markers(html_body: str, token_data: list) -> str:
     """将占位符 token 替换为内联 HTML 标记。"""
-    for token, quoted, typ, obj_id, badge in token_data:
+    for item in token_data:
+        token, quoted, typ, obj_id, badge = item[:5]
+        is_branch = item[5] if len(item) > 5 else False
         esc_q = html_mod.escape(quoted)
         if typ == "ann":
-            rendered = (
-                f'<span style="border-bottom:1.5px dashed #d97706;color:#fde68a;">'
-                f"{esc_q}</span>"
-                f'<a href="ann://{obj_id}" style="color:#d97706;font-size:11px;'
-                f"font-weight:700;text-decoration:none;background:#451a03;"
-                f"border-radius:3px;padding:0 3px;margin-left:1px;"
-                f'vertical-align:super;">{badge}</a>'
-            )
+            if is_branch:
+                # 支线样式：青色
+                rendered = (
+                    f'<span style="border-bottom:1.5px dashed #38b2ac;color:#81e6d9;">'
+                    f"{esc_q}</span>"
+                    f'<a href="ann://{obj_id}" style="color:#81e6d9;font-size:11px;'
+                    f"font-weight:700;text-decoration:none;background:#234e52;"
+                    f"border-radius:3px;padding:0 3px;margin-left:1px;"
+                    f'vertical-align:super;">{badge}</a>'
+                )
+            else:
+                # 普通注释样式：琥珀色
+                rendered = (
+                    f'<span style="border-bottom:1.5px dashed #d97706;color:#fde68a;">'
+                    f"{esc_q}</span>"
+                    f'<a href="ann://{obj_id}" style="color:#d97706;font-size:11px;'
+                    f"font-weight:700;text-decoration:none;background:#451a03;"
+                    f"border-radius:3px;padding:0 3px;margin-left:1px;"
+                    f'vertical-align:super;">{badge}</a>'
+                )
         else:
             rendered = (
                 f'<span style="border-bottom:1.5px dashed #60a5fa;color:#93c5fd;">'

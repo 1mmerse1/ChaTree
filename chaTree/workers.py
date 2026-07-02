@@ -7,6 +7,8 @@ from .prompts import (
     ANNOTATION_MAX_CHARS,
     ANNOTATION_MAX_TOKENS,
     ANNOTATION_SYSTEM_PROMPT,
+    BRANCH_MAX_TOKENS,
+    BRANCH_SYSTEM_PROMPT,
     CHAT_MAX_TOKENS,
     CHAT_SYSTEM_PROMPT,
     TAG_SYSTEM_PROMPT,
@@ -114,6 +116,43 @@ class AnnotationWorker(QThread):
                     self._full += delta
                     self.token_received.emit(delta)
             self.finished.emit(self._trim_annotation(self._full))
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class BranchWorker(QThread):
+    """支线多轮对话流式生成器（与主对话相同的 token 预算，无特殊截断）。"""
+
+    token_received = Signal(str)
+    finished = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, messages: list):
+        super().__init__()
+        self._msgs = messages
+        self._full = ""
+
+    def run(self):
+        if not HAS_OPENAI:
+            self.error.emit("请安装 openai：pip install openai")
+            return
+        if not ws.api_key:
+            self.error.emit("请先在 ⚙ 设置 中填入 API Key")
+            return
+        try:
+            client = openai.OpenAI(api_key=ws.api_key, base_url=ws.base_url)
+            msgs = _prepend_system(self._msgs, BRANCH_SYSTEM_PROMPT)
+            with client.chat.completions.create(
+                model=ws.model,
+                messages=msgs,
+                stream=True,
+                max_tokens=BRANCH_MAX_TOKENS,
+            ) as stream:
+                for chunk in stream:
+                    delta = chunk.choices[0].delta.content or ""
+                    self._full += delta
+                    self.token_received.emit(delta)
+            self.finished.emit(self._full)
         except Exception as e:
             self.error.emit(str(e))
 

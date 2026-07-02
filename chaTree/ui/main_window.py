@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
     QSplitter,
+    QStackedWidget,
     QWidget,
 )
 
@@ -24,6 +25,7 @@ from ..models import Annotation, Conversation, MessageNode
 from ..styles import APP_QSS
 from ..workspace import ws
 from .annotation_panel import AnnotationPanel
+from .branch_panel import BranchPanel
 from .chat_panel import ChatPanel
 from .sidebar import Sidebar
 
@@ -45,6 +47,13 @@ class MainWindow(QMainWindow):
         lay.setSpacing(0)
 
         self.ann_panel = AnnotationPanel()
+        self.branch_panel = BranchPanel()
+
+        self._right_stack = QStackedWidget()
+        self._right_stack.addWidget(self.ann_panel)    # Page 0
+        self._right_stack.addWidget(self.branch_panel)  # Page 1
+        self._right_stack.hide()  # 默认隐藏，打开注释/支线时才显示
+
         self.chat_panel = ChatPanel(self.ann_panel)
         self.sidebar = Sidebar()
         self.sidebar.conversation_selected.connect(self.chat_panel.load_conversation)
@@ -52,9 +61,20 @@ class MainWindow(QMainWindow):
             lambda cid, mid: self.chat_panel._navigate_to(cid, mid)
         )
 
+        # ── 右栏信号连接 ──
+        # 注释扩展为支线
+        self.ann_panel.branch_created.connect(self._on_branch_created)
+        # 点击已扩展的注释 → 打开支线面板
+        self.ann_panel.branch_requested.connect(self._open_branch_panel)
+        # 注释面板打开时 → 显示右栏并切到注释页
+        self.ann_panel.annotation_shown.connect(self._show_annotation_panel)
+        # 任一面板关闭 → 隐藏右栏
+        self.ann_panel.closed.connect(self._right_stack.hide)
+        self.branch_panel.closed.connect(self._right_stack.hide)
+
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter.addWidget(self.chat_panel)
-        self._splitter.addWidget(self.ann_panel)
+        self._splitter.addWidget(self._right_stack)
         self._splitter.setStretchFactor(0, 1)
         self._splitter.setStretchFactor(1, 0)
         self._splitter.setSizes([980, 300])
@@ -121,6 +141,38 @@ class MainWindow(QMainWindow):
             lambda cid, mid: self.chat_panel._navigate_to(cid, mid)
         )
         dlg.show()
+
+    def _on_branch_created(self, conv_id: str, branch_id: str):
+        """注释扩展为支线后的回调 — 刷新主视图并打开支线面板。"""
+        conv = ws.conversations.get(conv_id)
+        if not conv:
+            return
+        # 如果当前对话是支线所属的对话，重新加载以更新内联标记
+        if self.chat_panel.conv and self.chat_panel.conv.id == conv_id:
+            from ..constants import USE_WEBENGINE
+            if USE_WEBENGINE:
+                self.chat_panel.conv_view.reload_all(conv)
+        self._open_branch_panel(conv_id, branch_id)
+
+    def _show_annotation_panel(self):
+        """显示右栏注释面板。"""
+        self._right_stack.setCurrentIndex(0)
+        self._right_stack.show()
+
+    def _open_branch_panel(self, conv_id: str, branch_id: str):
+        """打开支线面板。"""
+        conv = ws.conversations.get(conv_id)
+        if not conv:
+            return
+        branch = None
+        for b in conv.branches:
+            if b.id == branch_id:
+                branch = b
+                break
+        if branch:
+            self.branch_panel.show_branch(conv, branch)
+            self._right_stack.setCurrentIndex(1)
+            self._right_stack.show()
 
     def _seed_demo(self):
         if ws.conversations:

@@ -257,7 +257,7 @@ class GraphDialog(QDialog):
         if not visible_ids:
             visible_ids = set(ws.conversations.keys())
 
-        net = self._builder.build(conversation_ids=list(visible_ids))
+        net, branch_node_ids = self._builder.build(conversation_ids=list(visible_ids))
 
         # 缓存节点信息（用于详情面板）— 按 round 结构
         self._node_info_cache.clear()
@@ -278,6 +278,7 @@ class GraphDialog(QDialog):
                         if nxt.role == "assistant":
                             answer = nxt.content
                     self._node_info_cache[nid] = {
+                        "type": "round",
                         "conv_id": cid,
                         "msg_id": msg.id,
                         "conv_title": conv.title,
@@ -286,12 +287,43 @@ class GraphDialog(QDialog):
                         "tags": msg.tags,
                     }
 
+            # 支线节点缓存
+            for branch in conv.branches:
+                bid = f"branch::{cid}::{branch.id}"
+                if bid not in branch_node_ids:
+                    continue
+                # 查找注释问题
+                ann_question = ""
+                for msg in conv.messages:
+                    for a in msg.annotations:
+                        if a.id == branch.annotation_id:
+                            ann_question = a.user_question
+                            break
+                    if ann_question:
+                        break
+                self._node_info_cache[bid] = {
+                    "type": "branch",
+                    "conv_id": cid,
+                    "branch_id": branch.id,
+                    "source_msg_id": branch.source_msg_id,
+                    "conv_title": conv.title,
+                    "question": ann_question,
+                    "msg_count": len(branch.messages),
+                    "tags": branch.tags,
+                }
+
         self._graph_view.load_graph(net)
 
         # 更新统计
         node_count = len(net.nodes)
         edge_count = len(net.edges)
-        self._stats_label.setText(f"节点: {node_count}  ·  边: {edge_count}")
+        branch_count = len(branch_node_ids)
+        if branch_count > 0:
+            self._stats_label.setText(
+                f"节点: {node_count} (含 {branch_count} 支线)  ·  边: {edge_count}"
+            )
+        else:
+            self._stats_label.setText(f"节点: {node_count}  ·  边: {edge_count}")
 
     def _populate_filter(self):
         """（重新）填充筛选面板的对话列表。"""
@@ -362,25 +394,40 @@ class GraphDialog(QDialog):
     # ── 交互 ───────────────────────────────────────────────────────
 
     def _on_node_selected(self, conv_id: str, msg_id: str, node_id: str):
-        """单击节点 → 更新右侧详情面板（显示 Q&A 轮次）。"""
+        """单击节点 → 更新右侧详情面板。"""
         info = self._node_info_cache.get(node_id, {})
         if not info:
             return
 
+        node_type = info.get("type", "round")
         self._current_conv_id = conv_id
         self._current_msg_id = msg_id
 
-        self._detail_title.setText(
-            f"<b>{info.get('conv_title', '')}</b>"
-            f"<br><span style='color:#718096;'>对话轮次</span>"
-        )
+        if node_type == "branch":
+            # 支线节点 — 导航到支线所属的主线消息
+            self._current_conv_id = conv_id
+            self._current_msg_id = info.get("source_msg_id", "")
+            self._detail_title.setText(
+                f"<b>{info.get('conv_title', '')}</b>"
+                f"<br><span style='color:#38b2ac;'>支线</span>"
+            )
+            question = info.get("question", "")
+            msg_count = info.get("msg_count", 0)
+            display = f"❓ {question[:300]}\n\n💬 {msg_count} 条后续消息"
+            self._detail_content.setPlainText(display)
+        else:
+            # 普通轮次节点
+            self._detail_title.setText(
+                f"<b>{info.get('conv_title', '')}</b>"
+                f"<br><span style='color:#718096;'>对话轮次</span>"
+            )
 
-        question = info.get("question", "")
-        answer = info.get("answer", "")
-        display = f"❓ {question[:300]}"
-        if answer:
-            display += f"\n\n💬 {answer[:300]}"
-        self._detail_content.setPlainText(display)
+            question = info.get("question", "")
+            answer = info.get("answer", "")
+            display = f"❓ {question[:300]}"
+            if answer:
+                display += f"\n\n💬 {answer[:300]}"
+            self._detail_content.setPlainText(display)
 
         tags = info.get("tags", [])
         if tags:
