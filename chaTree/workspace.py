@@ -19,6 +19,7 @@ class Workspace:
         self.model = "gpt-4o-mini"
         self.folders: list[Folder] = []
         self._unfiled: list[str] = []
+        self.auto_link_suggestions: bool = False
         self.conversations: dict[str, Conversation] = {}
         self._backlink_index: dict[tuple, list[Link]] = {}
         self._repo = JsonConversationRepository(DATA_DIR)
@@ -34,6 +35,7 @@ class Workspace:
             self.api_key = d.get("api_key", "")
             self.base_url = d.get("base_url", self.base_url)
             self.model = d.get("model", self.model)
+            self.auto_link_suggestions = d.get("auto_link_suggestions", False)
             self.folders = [Folder.from_dict(fd) for fd in d.get("folders", [])]
             self._unfiled = d.get("unfiled", [])
             for cd in d.get("conversations", []):
@@ -67,6 +69,7 @@ class Workspace:
                     "api_key": self.api_key,
                     "base_url": self.base_url,
                     "model": self.model,
+                    "auto_link_suggestions": self.auto_link_suggestions,
                     "folders": [f.to_dict() for f in self.folders],
                     "unfiled": self._unfiled,
                 },

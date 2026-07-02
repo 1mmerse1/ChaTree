@@ -7,6 +7,8 @@ from .prompts import (
     ANNOTATION_MAX_CHARS,
     ANNOTATION_MAX_TOKENS,
     ANNOTATION_SYSTEM_PROMPT,
+    AUTO_LINK_MAX_TOKENS,
+    AUTO_LINK_SYSTEM_PROMPT,
     BRANCH_MAX_TOKENS,
     BRANCH_SYSTEM_PROMPT,
     CHAT_MAX_TOKENS,
@@ -157,6 +159,164 @@ class BranchWorker(QThread):
             self.error.emit(str(e))
 
 
+class AutoLinkWorker(QThread):
+    """分析当前 Q&A 轮次与历史轮次的关联，推荐建立链接。"""
+
+    finished = Signal(object)   # list[dict]
+    error = Signal(str)
+
+    def __init__(
+        self,
+        current_conv_id: str,
+        current_msg_id: str,
+        current_user_msg: str,
+        current_assistant_msg: str,
+        all_convs: list,
+        round_index: int = -1,
+    ):
+        super().__init__()
+        self._current_conv_id = current_conv_id
+        self._current_msg_id = current_msg_id
+        self._current_user_msg = current_user_msg
+        self._current_assistant_msg = current_assistant_msg
+        self._all_convs = all_convs
+        self._round_index = round_index
+
+    def run(self):
+        import json as _json
+        import re as _re
+
+        print("[AutoLink] ── 开始分析关联 ──")
+
+        if not HAS_OPENAI:
+            print("[AutoLink] 跳过：未安装 openai")
+            self.finished.emit([])
+            return
+        if not ws.api_key:
+            print("[AutoLink] 跳过：未配置 API Key")
+            self.finished.emit([])
+            return
+
+        # ── 构建候选轮次 ──
+        candidates: list[dict] = []
+        for conv in self._all_convs:
+            if conv.id == self._current_conv_id:
+                # 同对话：跳过当前轮次前后 5 轮
+                for i, msg in enumerate(conv.messages):
+                    if msg.role != "user":
+                        continue
+                    if self._round_index >= 0 and abs(i - self._round_index) < 10:
+                        continue
+                    candidates.append({
+                        "conv_id": conv.id,
+                        "msg_id": msg.id,
+                        "title": conv.title,
+                        "question": msg.content[:80].replace("\n", " "),
+                    })
+            else:
+                # 跨对话：取所有 user 消息
+                for msg in conv.messages:
+                    if msg.role != "user":
+                        continue
+                    candidates.append({
+                        "conv_id": conv.id,
+                        "msg_id": msg.id,
+                        "title": conv.title,
+                        "question": msg.content[:80].replace("\n", " "),
+                    })
+
+        print(f"[AutoLink] 候选轮次: {len(candidates)} 个")
+        if not candidates:
+            print("[AutoLink] 跳过：无候选轮次")
+            self.finished.emit([])
+            return
+
+        # ── 构建 prompt ──
+        cand_lines: list[str] = []
+        for c in candidates:
+            cand_lines.append(
+                f"- {c['conv_id']}::{c['msg_id']} | {c['title']} | {c['question']}"
+            )
+        cand_text = "\n".join(cand_lines)
+
+        user_prompt = (
+            f"当前轮次：\n"
+            f"❓ 用户问题：{self._current_user_msg[:500]}\n"
+            f"💬 AI 回答：{self._current_assistant_msg[:300]}\n\n"
+            f"候选轮次（格式：conv_id::msg_id | 标题 | 问题摘要）：\n"
+            f"{cand_text}"
+        )
+
+        try:
+            client = openai.OpenAI(api_key=ws.api_key, base_url=ws.base_url)
+            msgs = [
+                {"role": "system", "content": AUTO_LINK_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ]
+            resp = client.chat.completions.create(
+                model=ws.model,
+                messages=msgs,
+                max_tokens=AUTO_LINK_MAX_TOKENS,
+                stream=False,
+            )
+            choice = resp.choices[0] if resp.choices else None
+            if choice is None:
+                print("[AutoLink] 跳过：API 返回空 choices")
+                self.finished.emit([])
+                return
+
+            text = (choice.message.content or "").strip()
+            print(f"[AutoLink] LLM 返回: {text[:200]}")
+            # 提取 JSON（可能被 markdown 代码块包裹）
+            json_match = _re.search(r"\{.*\}", text, _re.DOTALL)
+            if not json_match:
+                print("[AutoLink] 跳过：无法从返回中提取 JSON")
+                self.finished.emit([])
+                return
+
+            data = _json.loads(json_match.group(0))
+            raw_suggestions = data.get("suggestions", [])
+            print(f"[AutoLink] LLM 建议数: {len(raw_suggestions)}")
+        except Exception as e:
+            print(f"[AutoLink] 异常：{e}")
+            self.finished.emit([])
+            return
+
+        # ── 去重 + 截断 ──
+        existing = set()
+        current_conv = None
+        for c in self._all_convs:
+            if c.id == self._current_conv_id:
+                current_conv = c
+                break
+        if current_conv:
+            for link in current_conv.links:
+                if link.source_msg_id == self._current_msg_id:
+                    existing.add((link.target_conv_id, link.target_msg_id))
+
+        suggestions: list[dict] = []
+        skipped_dup = 0
+        for s in raw_suggestions:
+            key = (s.get("conv_id", ""), s.get("msg_id", ""))
+            if key in existing:
+                skipped_dup += 1
+                continue
+            suggestions.append(s)
+            if len(suggestions) >= 3:
+                break
+
+        if skipped_dup:
+            print(f"[AutoLink] 去重移除: {skipped_dup} 个（已有链接）")
+        print(f"[AutoLink] 最终建议: {len(suggestions)} 个")
+        if suggestions:
+            for s in suggestions:
+                print(f"  → {s.get('conv_id', '?')}「{s.get('reason', '?')}」")
+        else:
+            print("[AutoLink] 结论：无强关联，不弹窗")
+
+        self.finished.emit(suggestions)
+
+
 class TagWorker(QThread):
     """非流式标签生成器（使用流式 API + 收集全部 token）。"""
     finished = Signal(object)
@@ -176,7 +336,6 @@ class TagWorker(QThread):
             return
         try:
             client = openai.OpenAI(api_key=ws.api_key, base_url=ws.base_url)
-            print(f"[TagWorker] 模型: {ws.model}  base_url: {ws.base_url}")
             msgs = [
                 {"role": "system", "content": TAG_SYSTEM_PROMPT},
                 {
@@ -197,32 +356,19 @@ class TagWorker(QThread):
             )
             choice = resp.choices[0] if resp.choices else None
             if choice is None:
-                print("[TagWorker] API 返回空 choices")
                 self.finished.emit([])
                 return
 
             text = (choice.message.content or "").strip()
-            print(f"[TagWorker] API 返回: {text!r}")
 
             # 某些模型（如 deepseek-reasoner）content 为空但 reasoning_content 有值
             if not text:
-                reasoning = getattr(choice.message, "reasoning_content", None)
-                if reasoning:
-                    print(f"[TagWorker] reasoning_content: {reasoning!r}")
-                finish = getattr(choice, "finish_reason", "?")
-                print(f"[TagWorker] finish_reason={finish}, 无 content")
                 self.finished.emit([])
                 return
 
             import re
             tags = [t.strip() for t in re.split(r"[，,]", text) if t.strip()]
             tags = tags[:5]
-            if tags:
-                print(f"[TagWorker] 生成标签: {tags}")
-            else:
-                print("[TagWorker] 未能解析出任何标签")
             self.finished.emit(tags)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             self.error.emit(f"TagWorker: {e}")

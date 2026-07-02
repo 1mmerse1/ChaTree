@@ -283,26 +283,101 @@ class ChatPanel(QWidget):
             ws.save_conversation(self.conv)
         if assistant_node:
             self._start_tag_generation(assistant_node)
+            self._start_auto_link_check(assistant_node)
 
     def _on_error(self, err: str):
+        """显示对话流错误。"""
+        from PySide6.QtWidgets import QMessageBox
+
+        QMessageBox.warning(self, "对话错误", f"请求失败：\n{err}")
         self._refresh_timer.stop()
-        if USE_WEBENGINE:
-            body = render_msg_body(f"❌ {err}", [], streaming=False)
-            msg_id = self._streaming_msg_id
-            if self.conv:
-                for m in self.conv.messages:
-                    if m.id == msg_id:
-                        m.content = f"❌ {err}"
-                        break
-            self.conv_view.finalize_streaming(body, msg_id, [])
-            self._streaming_msg_id = ""
-        else:
-            if self._stream_bubble:
-                self._stream_bubble.node.content = f"❌ {err}"
-                self._stream_bubble.finalize()
-                self._stream_bubble = None
-            self._scroll_to_bottom()
         self.send_btn.setEnabled(True)
+        if not USE_WEBENGINE:
+            if self._stream_bubble:
+                self._stream_bubble.node.content = f"⚠️ 请求失败：{err}"
+                self._stream_bubble.refresh()
+                self._stream_bubble = None
+
+    def _start_auto_link_check(self, assistant_node: MessageNode):
+        """在 AI 回答完成后检查是否需要推荐链接。"""
+        if not ws.auto_link_suggestions:
+            print("[AutoLink] 功能未在设置中启用，跳过")
+            return
+        if not self.conv:
+            return
+        try:
+            idx = self.conv.messages.index(assistant_node)
+        except ValueError:
+            return
+        if idx < 1:
+            return
+        user_node = self.conv.messages[idx - 1]
+        if user_node.role != "user":
+            return
+
+        print(f"[AutoLink] 触发检查 — 对话「{self.conv.title}」第 {idx // 2 + 1} 轮")
+
+        from ..workers import AutoLinkWorker
+
+        self._auto_link_worker = AutoLinkWorker(
+            current_conv_id=self.conv.id,
+            current_msg_id=user_node.id,
+            current_user_msg=user_node.content,
+            current_assistant_msg=assistant_node.content,
+            all_convs=list(ws.conversations.values()),
+            round_index=idx - 1,
+        )
+        self._auto_link_worker.finished.connect(self._on_auto_link_suggestions)
+        self._auto_link_worker.error.connect(
+            lambda e: print(f"[AutoLink] 错误：{e}")
+        )
+        self._auto_link_worker.start()
+
+    def _on_auto_link_suggestions(self, suggestions: list):
+        """处理 AI 推荐链接的结果 — 弹出确认对话框。"""
+        if not suggestions:
+            print("[AutoLink] 回调：无建议，静默跳过")
+            return
+        if not self.conv:
+            return
+        print(f"[AutoLink] 回调：收到 {len(suggestions)} 条建议，弹出确认窗口")
+        from .link_suggestion_dialog import LinkSuggestionDialog
+
+        dlg = LinkSuggestionDialog(suggestions, ws.conversations, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            print("[AutoLink] 用户点击「跳过」，不创建链接")
+            return
+
+        selected = dlg.selected_suggestions()
+        if not selected:
+            print("[AutoLink] 用户未勾选任何建议")
+            return
+
+        print(f"[AutoLink] 用户确认创建 {len(selected)} 条链接")
+
+        # 当前轮次的用户消息 ID 作为 link source
+        user_msg_id = ""
+        for i in range(len(self.conv.messages) - 1, -1, -1):
+            if self.conv.messages[i].role == "user" and self.conv.messages[i].content:
+                user_msg_id = self.conv.messages[i].id
+                break
+
+        import uuid
+        for s in selected:
+            link = Link(
+                id=str(uuid.uuid4()),
+                source_msg_id=user_msg_id,
+                target_conv_id=s.get("conv_id", ""),
+                target_msg_id=s.get("msg_id", ""),
+            )
+            self.conv.links.append(link)
+
+        ws.save_conversation(self.conv)
+        if USE_WEBENGINE:
+            self.conv_view._conv_titles = {
+                c.id: c.title for c in ws.conversations.values()
+            }
+            self.conv_view.reload_all(self.conv)
 
     # ── 标签 ──
 
@@ -529,7 +604,7 @@ class ChatPanel(QWidget):
 
         if USE_WEBENGINE:
             self.conv_view.reload_all(self.conv)
-            self.conv_view.start_streaming(anode.id)
+            self.conv_view._pending_streaming_id = anode.id
             self._streaming_msg_id = anode.id
             self._buf = ""
         else:

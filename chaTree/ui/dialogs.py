@@ -6,6 +6,7 @@ from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -355,6 +356,14 @@ class SettingsDialog(QDialog):
         self._model_list.setMinimumHeight(220)
         lay.addWidget(self._model_list)
 
+        lay.addSpacing(8)
+        self._auto_link_cb = QCheckBox("AI 自动推荐链接（每轮回答后分析关联并建议建立链接）")
+        self._auto_link_cb.setChecked(ws.auto_link_suggestions)
+        self._auto_link_cb.setStyleSheet(
+            "color:#a0aec0;font-size:12px;spacing:8px;"
+        )
+        lay.addWidget(self._auto_link_cb)
+
         lay.addSpacing(14)
         row = QHBoxLayout()
         cc = QPushButton("取消")
@@ -377,6 +386,7 @@ class SettingsDialog(QDialog):
         preset = MODEL_PRESETS[row]
         ws.model = preset.model_id
         ws.base_url = preset.base_url
+        ws.auto_link_suggestions = self._auto_link_cb.isChecked()
         ws.save_settings()
         self.accept()
 

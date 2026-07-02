@@ -198,6 +198,7 @@ class ConversationView(QWidget):
         self._loaded = False
         self._pending_html: Optional[str] = None
         self._streaming_msg_id: str = ""
+        self._pending_streaming_id: str = ""
         self._ctx_menu_builder: Optional[Callable[[str, str], Optional[QMenu]]] = None
         self._ann_map: dict[str, tuple[MessageNode, object]] = {}
         self._conv_titles: dict[str, str] = {}
@@ -228,6 +229,7 @@ class ConversationView(QWidget):
     def load_conversation(self, conv: Conversation):
         self.conv = conv
         self._streaming_msg_id = ""
+        self._pending_streaming_id = ""
         self._ann_map.clear()
         for msg in conv.messages:
             for ann in msg.annotations:
@@ -473,6 +475,10 @@ class ConversationView(QWidget):
             pending = self._pending_scroll_msg_id
             self._pending_scroll_msg_id = ""
             self._run_js(f"ChainTree.scrollToMsg({_json.dumps(pending)});", None)
+        if ok and self._pending_streaming_id:
+            sid = self._pending_streaming_id
+            self._pending_streaming_id = ""
+            self.start_streaming(sid)
 
     def _on_height_result(self, result):
         # WebView 高度由外层 layout 的 stretch 控制，不设置固定高度，
