@@ -59,7 +59,7 @@ class Sidebar(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        logo = QLabel("✦ AI 对话")
+        logo = QLabel("✦ AI Chat")
         logo.setStyleSheet(
             "color:#e2e8f0;font-size:15px;font-weight:700;"
             "padding:18px 16px 10px 16px;"

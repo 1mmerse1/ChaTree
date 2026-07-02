@@ -33,7 +33,7 @@ from .sidebar import Sidebar
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AI 对话管理")
+        self.setWindowTitle("ChaTree")
         self.resize(1300, 820)
         self.setStyleSheet(APP_QSS)
         self._build()

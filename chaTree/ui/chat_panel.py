@@ -79,19 +79,7 @@ class ChatPanel(QWidget):
         self._conv_title.mouseDoubleClickEvent = self._on_title_dbl_click
         title_row.addWidget(self._conv_title)
         title_row.addStretch()
-        md_lbl = QLabel("Markdown")
-        md_lbl.setStyleSheet(
-            "color:#276749;background:#1c4532;border-radius:4px;"
-            "padding:2px 7px;font-size:10px;font-weight:600;"
-        )
-        if not markdown_ready():
-            md_lbl.setText("纯文本")
-            md_lbl.setStyleSheet(
-                "color:#744210;background:#3c2a09;border-radius:4px;"
-                "padding:2px 7px;font-size:10px;font-weight:600;"
-            )
-        title_row.addWidget(md_lbl)
-        tbar_layout.addLayout(title_row)
+
 
         self._tags_layout = QHBoxLayout()
         self._tags_layout.setSpacing(4)
