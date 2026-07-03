@@ -239,6 +239,8 @@ class ConversationView(QWidget):
             outgoing_map.setdefault(link.source_msg_id, []).append(link)
         html_parts = []
         for msg in conv.messages:
+            if not msg.content and msg.role == "assistant":
+                continue
             html_parts.append(self._render_message(msg, links=outgoing_map.get(msg.id, [])))
         messages_html = "\n".join(html_parts)
         full = _BASE_HTML.format(

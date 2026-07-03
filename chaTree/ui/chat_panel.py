@@ -21,9 +21,16 @@ from PySide6.QtWidgets import (
 
 from ..constants import USE_WEBENGINE
 from ..conversation_view import ConversationView
+from ..file_reader import FILE_DIALOG_FILTER, get_icon, get_language_hint, read_file
 from ..markdown_render import markdown_ready, render_msg_body
 from ..models import Annotation, Conversation, Link, MessageNode
-from ..styles import BTN_PRIMARY
+from ..styles import (
+    ATTACH_BTN,
+    BTN_PRIMARY,
+    FILE_CHIP,
+    FILE_CHIP_CONTAINER,
+    FILE_CHIP_REMOVE,
+)
 from ..workers import ChatWorker, TagWorker
 from ..workspace import ws
 from .annotation_panel import AnnotationPanel
@@ -46,6 +53,8 @@ class ChatPanel(QWidget):
         self._refresh_timer.setInterval(80)
         self._refresh_timer.timeout.connect(self._flush_stream)
         self._buf = ""
+        self._attached_files: list[dict] = []
+        self.setAcceptDrops(True)
         self._build()
 
     def _build(self):
@@ -119,12 +128,31 @@ class ChatPanel(QWidget):
 
         self.stack.addWidget(page)
 
+        # 文件标签栏（默认隐藏，有文件时显示在输入栏上方）
+        self._file_bar = QWidget()
+        self._file_bar.setObjectName("file_bar")
+        self._file_bar.setStyleSheet(FILE_CHIP_CONTAINER)
+        self._file_bar.setVisible(False)
+        self._file_bar_layout = QHBoxLayout(self._file_bar)
+        self._file_bar_layout.setContentsMargins(20, 6, 20, 6)
+        self._file_bar_layout.setSpacing(6)
+        self._file_bar_layout.addStretch()
+        root.addWidget(self._file_bar)
+
+        # 输入栏
         ibar = QWidget()
         ibar.setFixedHeight(80)
         ibar.setStyleSheet("background:#1a202c;border-top:1px solid #2d3748;")
         il = QHBoxLayout(ibar)
         il.setContentsMargins(20, 14, 20, 14)
         il.setSpacing(10)
+
+        self.attach_btn = QPushButton("+")
+        self.attach_btn.setFixedSize(40, 48)
+        self.attach_btn.setStyleSheet(ATTACH_BTN)
+        self.attach_btn.setToolTip("添加文件（代码 / PDF / Word）")
+        self.attach_btn.clicked.connect(self._pick_files)
+        il.addWidget(self.attach_btn)
 
         self.input = QTextEdit()
         self.input.setPlaceholderText("输入消息…  Ctrl+Enter 发送")
@@ -147,6 +175,7 @@ class ChatPanel(QWidget):
         self.send_btn.setStyleSheet(BTN_PRIMARY)
         self.send_btn.clicked.connect(self.send_message)
         il.addWidget(self.send_btn)
+
         root.addWidget(ibar)
 
     def _build_welcome(self) -> QWidget:
@@ -205,14 +234,32 @@ class ChatPanel(QWidget):
     def send_message(self):
         if not self.conv or (self._worker and self._worker.isRunning()):
             return
-        text = self.input.toPlainText().strip()
-        if not text:
+        user_text = self.input.toPlainText().strip()
+        if not user_text and not self._attached_files:
             return
         self.stack.setCurrentIndex(1)
         self.input.clear()
+
+        had_files = bool(self._attached_files)
+
+        # UI 显示文本：用户输入 + 文件名标识
+        display_text = user_text
+        if had_files:
+            names = ", ".join(f["name"] for f in self._attached_files)
+            display_text = f"{user_text}\n\n📎 已附加: {names}"
+
+        # API 文本：用户输入 + 文件完整内容
+        api_text = user_text
+        if had_files:
+            api_text = self._build_message_with_files(user_text)
+
+        self._clear_attachments()
         self.send_btn.setEnabled(False)
 
-        unode = MessageNode(id=str(uuid.uuid4()), role="user", content=text)
+        if not api_text.strip():
+            return
+
+        unode = MessageNode(id=str(uuid.uuid4()), role="user", content=display_text)
         self.conv.messages.append(unode)
 
         anode = MessageNode(id=str(uuid.uuid4()), role="assistant", content="")
@@ -230,11 +277,150 @@ class ChatPanel(QWidget):
             self._scroll_to_bottom(force=True)
 
         api_msgs = [{"role": m.role, "content": m.content} for m in self.conv.messages[:-1]]
+        if had_files and api_msgs:
+            api_msgs[-1]["content"] = api_text
         self._worker = ChatWorker(api_msgs)
         self._worker.token_received.connect(self._on_token)
         self._worker.finished.connect(self._on_done)
         self._worker.error.connect(self._on_error)
         self._worker.start()
+
+    # ── 文件上传 ──
+
+    def _pick_files(self):
+        from PySide6.QtWidgets import QFileDialog
+
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "选择文件", "", FILE_DIALOG_FILTER,
+        )
+        if paths:
+            self._add_files(paths)
+
+    def _add_files(self, paths: list[str]):
+        added = 0
+        existing_paths = {f["path"] for f in self._attached_files}
+        for p in paths:
+            if p in existing_paths:
+                continue
+            content, error = read_file(p)
+            name = p.split("/")[-1] if "/" in p else p.split("\\")[-1]
+            icon = "⚠️" if error else get_icon(p)
+            self._attached_files.append({
+                "path": p,
+                "name": name,
+                "content": content,
+                "icon": icon,
+                "error": error,
+            })
+            added += 1
+            existing_paths.add(p)
+        if added:
+            self._refresh_chips()
+
+    def _remove_file(self, index: int):
+        if 0 <= index < len(self._attached_files):
+            self._attached_files.pop(index)
+        self._refresh_chips()
+
+    def _refresh_chips(self):
+        # 清空旧的 chips
+        while self._file_bar_layout.count() > 1:  # 保留末尾 stretch
+            item = self._file_bar_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        if not self._attached_files:
+            self._file_bar.setVisible(False)
+            return
+
+        self._file_bar.setVisible(True)
+        for i, f in enumerate(self._attached_files):
+            chip = self._make_chip(i, f["icon"], f["name"], f.get("error"))
+            self._file_bar_layout.insertWidget(
+                self._file_bar_layout.count() - 1, chip
+            )
+
+    def _make_chip(self, index: int, icon: str, name: str, error: str | None) -> QWidget:
+        chip = QWidget()
+        chip.setStyleSheet(FILE_CHIP)
+        chip.setFixedHeight(28)
+        cl = QHBoxLayout(chip)
+        cl.setContentsMargins(8, 2, 6, 2)
+        cl.setSpacing(4)
+
+        label_text = f"{icon} {name}"
+        if len(name) > 25:
+            label_text = f"{icon} {name[:22]}…"
+        lbl = QLabel(label_text)
+        lbl.setToolTip(name + ("\n⚠️ " + error if error else ""))
+        if error:
+            lbl.setStyleSheet("color:#fc8181;font-size:12px;background:transparent;border:none;")
+        cl.addWidget(lbl)
+
+        rm_btn = QPushButton("✕")
+        rm_btn.setStyleSheet(FILE_CHIP_REMOVE)
+        rm_btn.setFixedSize(18, 18)
+        rm_btn.clicked.connect(lambda checked=False, idx=index: self._remove_file(idx))
+        cl.addWidget(rm_btn)
+
+        return chip
+
+    def _build_message_with_files(self, user_text: str) -> str:
+        parts: list[str] = []
+        if user_text.strip():
+            parts.append(user_text.strip())
+        parts.append("")
+        parts.append("---")
+        parts.append("📎 **附加上下文文件：**")
+        parts.append("")
+
+        for f in self._attached_files:
+            name = f["name"]
+            icon = f["icon"]
+            content = f["content"]
+            lang = get_language_hint(f["path"])
+            error = f.get("error")
+
+            parts.append(f"**{icon} {name}**")
+            if error:
+                parts.append(f"> ⚠️ *{error}*")
+            elif lang:
+                parts.append(f"```{lang}")
+                parts.append(content)
+                parts.append("```")
+            else:
+                parts.append("```")
+                parts.append(content)
+                parts.append("```")
+            parts.append("")
+
+        return "\n".join(parts)
+
+    def _clear_attachments(self):
+        self._attached_files.clear()
+        self._refresh_chips()
+
+    # ── 拖拽文件上传 ──
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        from pathlib import Path
+
+        paths: list[str] = []
+        for url in event.mimeData().urls():
+            p = url.toLocalFile()
+            if Path(p).is_file():
+                paths.append(p)
+        if paths:
+            self._add_files(paths)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
     def _on_token(self, token: str):
         if USE_WEBENGINE:

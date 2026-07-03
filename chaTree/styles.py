@@ -96,3 +96,29 @@ QPushButton {
 }
 QPushButton:hover { background: #2d3748; color: #bae6fd; }
 """
+
+ATTACH_BTN = """
+QPushButton {
+    background: #1e2430; color: #718096; border: none;
+    border-radius: 12px; font-size: 20px; font-weight: 700;
+}
+QPushButton:hover { background: #2d3748; color: #e2e8f0; }
+"""
+
+FILE_CHIP_CONTAINER = """
+QWidget#file_bar { background: #1a202c; border-top: 1px solid #2d3748; }
+"""
+
+FILE_CHIP = """
+QWidget { background: #1e2430; border: 1px solid #2d3748; border-radius: 8px; }
+QWidget:hover { background: #232a36; border-color: #4a5568; }
+QLabel { color: #a0aec0; font-size: 12px; background: transparent; border: none; }
+"""
+
+FILE_CHIP_REMOVE = """
+QPushButton {
+    background: transparent; color: #718096; border: none;
+    font-size: 14px; font-weight: 700; padding: 0 4px;
+}
+QPushButton:hover { color: #fc8181; background: transparent; }
+"""

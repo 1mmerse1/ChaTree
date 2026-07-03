@@ -361,6 +361,10 @@ class SettingsDialog(QDialog):
         self._auto_link_cb.setChecked(ws.auto_link_suggestions)
         self._auto_link_cb.setStyleSheet(
             "color:#a0aec0;font-size:12px;spacing:8px;"
+            "QCheckBox::indicator { width:16px; height:16px;"
+            "border:2px solid #718096; border-radius:3px; background:#1a202c; }"
+            "QCheckBox::indicator:checked { background:#3182ce; border-color:#63b3ed; }"
+            "QCheckBox::indicator:hover { border-color:#a0aec0; }"
         )
         lay.addWidget(self._auto_link_cb)
 

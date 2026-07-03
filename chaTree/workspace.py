@@ -55,6 +55,7 @@ class Workspace:
                 self.api_key = d.get("api_key", "")
                 self.base_url = d.get("base_url", self.base_url)
                 self.model = d.get("model", self.model)
+                self.auto_link_suggestions = d.get("auto_link_suggestions", False)
                 self.folders = [Folder.from_dict(fd) for fd in d.get("folders", [])]
                 self._unfiled = d.get("unfiled", [])
             except Exception as e:
