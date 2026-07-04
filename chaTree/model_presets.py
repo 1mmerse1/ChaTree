@@ -21,44 +21,28 @@ MODEL_PRESETS: tuple[ModelPreset, ...] = (
     # OpenAI GPT-5 系列（Chat Completions，同一 v1 端点）
     ModelPreset("OpenAI · GPT-5.5", "gpt-5.5", _OPENAI),
     ModelPreset("OpenAI · GPT-5.4", "gpt-5.4", _OPENAI),
-    ModelPreset("OpenAI · GPT-5.4 mini", "gpt-5.4-mini", _OPENAI),
-    ModelPreset("OpenAI · GPT-5 mini", "gpt-5-mini", _OPENAI),
     ModelPreset("OpenAI · GPT-5", "gpt-5", _OPENAI),
     ModelPreset("OpenAI · GPT-4o mini", "gpt-4o-mini", _OPENAI),
-    ModelPreset("OpenAI · GPT-4o", "gpt-4o", _OPENAI),
-    ModelPreset("OpenAI · GPT-4 Turbo", "gpt-4-turbo", _OPENAI),
     # Google Gemini（OpenAI 兼容层，需 Gemini API Key）
     ModelPreset("Gemini · 3 Pro", "gemini-3-pro", _GEMINI),
     ModelPreset("Gemini · 3 Flash", "gemini-3-flash", _GEMINI),
-    ModelPreset("Gemini · 2.5 Pro", "gemini-2.5-pro", _GEMINI),
-    ModelPreset("Gemini · 2.5 Flash", "gemini-2.5-flash", _GEMINI),
-    ModelPreset("Gemini · 2.0 Flash", "gemini-2.0-flash", _GEMINI),
     # DeepSeek
     ModelPreset("DeepSeek · V4 Pro", "deepseek-v4-pro", "https://api.deepseek.com"),
     ModelPreset("DeepSeek · V4 Flash", "deepseek-v4-flash", "https://api.deepseek.com"),
-    ModelPreset("DeepSeek · Chat", "deepseek-chat", "https://api.deepseek.com"),
-    ModelPreset(
-        "DeepSeek · Reasoner", "deepseek-reasoner", "https://api.deepseek.com"
-    ),
     # 通义千问
     ModelPreset(
-        "通义千问 · Plus",
-        "qwen-plus",
+        "通义千问 · Qwen3.7 Plus",
+        "qwen3.7-plus",
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     ),
     ModelPreset(
-        "通义千问 · Turbo",
-        "qwen-turbo",
+        "通义千问 · Qwen3.7 Max",
+        "qwen3.7-max",
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     ),
-    ModelPreset(
-        "通义千问 · Max",
-        "qwen-max",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    ),
-    # Moonshot
-    ModelPreset("Moonshot · 8K", "moonshot-v1-8k", "https://api.moonshot.cn/v1"),
-    ModelPreset("Moonshot · 32K", "moonshot-v1-32k", "https://api.moonshot.cn/v1"),
+    # Moonshot / Kimi
+    ModelPreset("Kimi · K2.6", "kimi-k2.6", "https://api.moonshot.cn/v1"),
+    ModelPreset("Kimi · K2.5", "kimi-k2.5", "https://api.moonshot.cn/v1"),
 )
 
 

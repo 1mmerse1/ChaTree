@@ -54,6 +54,8 @@ class ChatWorker(QThread):
                 max_tokens=CHAT_MAX_TOKENS,
             ) as stream:
                 for chunk in stream:
+                    if not chunk.choices:
+                        continue
                     delta = chunk.choices[0].delta.content or ""
                     self._full += delta
                     self.token_received.emit(delta)
@@ -114,6 +116,8 @@ class AnnotationWorker(QThread):
                 max_tokens=ANNOTATION_MAX_TOKENS,
             ) as stream:
                 for chunk in stream:
+                    if not chunk.choices:
+                        continue
                     delta = chunk.choices[0].delta.content or ""
                     self._full += delta
                     self.token_received.emit(delta)
@@ -151,6 +155,8 @@ class BranchWorker(QThread):
                 max_tokens=BRANCH_MAX_TOKENS,
             ) as stream:
                 for chunk in stream:
+                    if not chunk.choices:
+                        continue
                     delta = chunk.choices[0].delta.content or ""
                     self._full += delta
                     self.token_received.emit(delta)
