@@ -1,10 +1,10 @@
-# ChainTree — AI 智能对话管理系统
+# ChaTree — AI 智能对话管理系统
 
 基于 PySide6 的桌面端 AI 对话应用，支持 OpenAI 兼容的多种 LLM 后端，提供文件夹管理、消息间链接、追问批注、支线展开、知识图谱等结构化对话管理能力。
 
 ## 功能概览
 
-- **多模型支持** — 内置 17 个模型预设（OpenAI GPT-5/4 系列、Gemini、DeepSeek、通义千问、Moonshot），支持自定义 Base URL
+- **多模型支持** — 内置多个模型预设（OpenAI GPT-5 系列、Gemini、DeepSeek、通义千问、Kimi），支持自定义 Base URL
 - **文件夹管理** — 树形文件夹组织对话，拖拽排序
 - **流式输出** — 实时 token 级流式渲染，支持 Markdown + KaTeX 数学公式排版
 - **追问/批注** — 选中助手回复中任意文字 → 右键"追问"，右侧面板显示 AI 回答
@@ -50,7 +50,7 @@ python -m chaTree
 
 首次启动后，点击左下角 **⚙ 设置**：
 
-1. 在模型列表中选择一个预设（如 `OpenAI · GPT-4o mini`）
+1. 在模型列表中选择一个预设（如 `OpenAI · GPT-5.5`）
 2. 填入对应厂商的 **API Key**
 3. 如需使用代理或第三方 API，可修改 Base URL
 4. 可选：勾选 "AI 自动推荐链接" 启用智能链接建议
