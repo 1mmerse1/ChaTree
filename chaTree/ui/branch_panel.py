@@ -254,6 +254,7 @@ class BranchPanel(QWidget):
         # 添加助手占位
         anode = MessageNode(id=str(uuid.uuid4()), role="assistant", content="")
         branch.messages.append(anode)
+        self._add_message(anode)
         self._streaming_msg_id = anode.id
         self._buf = ""
         self._streaming_started = False
